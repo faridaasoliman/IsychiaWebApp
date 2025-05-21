@@ -19,12 +19,14 @@
 
       <input type="text" id="userSearch" placeholder="Search users..." autocomplete="off" />
 
-      <div class="contacts" id="contactsList"></div>
+      <div class="contacts" id="contactsList">
+        <!-- Friends will be loaded here dynamically -->
+      </div>
     </div>
 
     <!-- Chat Panel -->
     <div class="chat-panel">
-      <div class="chat-header" id="chatHeader">Select a user</div>
+      <div class="chat-header" id="chatHeader">Select a Friend</div>
       <div class="messages" id="messages">
         <!-- Messages will be displayed here -->
       </div>
@@ -35,6 +37,132 @@
     </div>
   </div>
 
-  <script src="scripts/chat.js"></script>
+<script>
+  const contactsList = document.getElementById('contactsList');
+  const chatHeader = document.getElementById('chatHeader');
+  const messages = document.getElementById('messages');
+  const messageForm = document.getElementById('messageForm');
+  const messageInput = document.getElementById('messageInput');
+  const userSearch = document.getElementById('userSearch');
+
+  let chatData = {};
+  let activeContact = null;
+
+  // Function to render chat messages for selected friend
+  function renderMessages(contactName) {
+    messages.innerHTML = '';
+    const msgs = chatData[contactName] || [];
+    msgs.forEach(msg => {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${msg.type}`;
+      msgDiv.innerHTML = `${msg.text}<div class="message-timestamp">${msg.timestamp}</div>`;
+      messages.appendChild(msgDiv);
+    });
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  // Load friends from backend and add dummy messages for each friend
+  function loadFriends() {
+    fetch('get_friends.php')
+      .then(response => response.json())
+      .then(data => {
+        contactsList.innerHTML = '';
+
+        if (data.length === 0) {
+          contactsList.innerHTML = '<div class="contact-item">No friends found</div>';
+          return;
+        }
+
+        data.forEach(friend => {
+          const contactDiv = document.createElement('div');
+          contactDiv.className = 'contact-item';
+          contactDiv.textContent = friend.username;
+          contactDiv.dataset.id = friend.id;
+
+          contactDiv.addEventListener('click', () => {
+            document.querySelectorAll('.contact-item').forEach(c => c.classList.remove('active'));
+            contactDiv.classList.add('active');
+            activeContact = friend.username;
+            chatHeader.textContent = activeContact;
+            renderMessages(activeContact);
+          });
+
+          contactsList.appendChild(contactDiv);
+
+          // Initialize chat data with dummy messages for this friend
+          chatData[friend.username] = [
+            {
+              text: "Hey, this is a dummy received message.",
+              type: "received",
+              timestamp: "10:00 AM"
+            },
+            {
+              text: "Hi! Thanks for your message.",
+              type: "sent",
+              timestamp: "10:01 AM"
+            },
+            {
+              text: "How are you doing today?",
+              type: "received",
+              timestamp: "10:02 AM"
+            }
+          ];
+        });
+      })
+      .catch(error => {
+        console.error('Error loading friends:', error);
+      });
+  }
+
+  // Send message handler
+  messageForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const msgText = messageInput.value.trim();
+    if (!msgText || !activeContact) return;
+
+    const newMsg = {
+      text: msgText,
+      type: 'sent',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    if (!chatData[activeContact]) chatData[activeContact] = [];
+    chatData[activeContact].push(newMsg);
+    renderMessages(activeContact);
+    messageInput.value = '';
+
+    // Send message to backend
+    fetch('send_message.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        receiver: activeContact,
+        message: msgText
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (!data.success) {
+        alert('Message send failed: ' + data.error);
+      }
+    })
+    .catch(error => {
+      console.error('Error sending message:', error);
+    });
+  });
+
+  // Search filter for friends list
+  userSearch.addEventListener('input', () => {
+    const filter = userSearch.value.toLowerCase();
+    const contacts = contactsList.getElementsByClassName('contact-item');
+    Array.from(contacts).forEach(contact => {
+      const name = contact.textContent.toLowerCase();
+      contact.style.display = name.includes(filter) ? '' : 'none';
+    });
+  });
+
+  // Load friends on page load
+  window.onload = loadFriends;
+</script>
 </body>
 </html>
